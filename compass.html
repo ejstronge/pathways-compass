@@ -1,0 +1,355 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>
+HMS Pathways Compass
+</title>
+<link rel="stylesheet" href="./resources/bootstrap.min.css">
+<link rel="stylesheet" href="./resources/bootstrap-theme.min.css">
+<script src="./resources/lodash.min.js"></script>
+<script src="./resources/jquery-2.1.4.js"></script>
+<script src="./resources/bootstrap.min.js"></script>
+<script src="./directory.js"></script>
+<script src="./invertedIndex.js"></script>
+</head>
+<body>
+
+<div class="container">
+	<!-- Title Bar -->
+	<div class="row">
+		<div class="page-header col-lg-12">
+			<h1>Pathways MedEd Compass <small><i> for the wards and beyond!</i></h1>  
+			<h5 style="color:gray;margin-top:20px;">#ProTip: Separate phrases by commas to find documents with all of these phrases</h5>
+		</div>
+	</div>
+	<!-- Search Bar-->
+	<div class="row"> 
+		<input id="search" type="text" class="form-control" placeholder="ex: Cancer, Immunotherapy" aria-describedby="basic-addon1"/>
+	</div>
+	<br>
+	<!-- Results Are Put Here -->
+	<div id="results">
+	</div>
+</div>
+
+<script>
+
+// Config
+var delay = 300; // ms to wait before searching
+var maxSnippets = 5; // max # of snippets to show below
+var maxResults = 100; // max results to show
+
+var results;
+var lastClick = new Date();
+var timeout;
+
+$(document).ready(function() {
+		
+	$('#search').on('input', inputChange);
+	inputChange();
+
+	function inputChange() {
+		query = $('#search').val();
+		$('#results').empty();
+		$('#results').append($(
+			'<h5> Searching... </h5>'));
+
+		lastClick = new Date();
+		clearTimeout(timeout);
+		timeout = setTimeout(function() {
+			$('#results').empty();
+			
+			// Implemented below
+			results = getSearchResults(query);
+
+			console.log('Search Results for', query, results.slice(0, 100));
+
+			results.slice(0, maxResults).forEach(function(n) {
+				var linkHTML = '';
+				
+				// Link locally or to an external resource
+				if (n.local) {
+					linkHTML += '<a href="./content/'+n.link+'" target="_blank">'+n.link+'</a>';
+				} else {
+					linkHTML += '<a href="'+n.link+'" target="_blank">'+n.title+'</a>';
+				}
+
+				var newResult = '<div class="panel panel-default">' +
+				'	<div class="panel-body">' +
+				'		<h5>'+linkHTML+'</h5>';
+
+				if (n.local) {
+					newResult += '		Snippets:<br><p>'+(n.snippets || []).slice(0, 5).join('</p><br><p>')+'</p>';
+				} else {
+					newResult += '		Link to '+n.link+'<br>';
+				}
+
+				newResult +='	</div></div>';
+
+				$('#results').append($(newResult));
+			});
+
+			if (results.length == 0 && query.length != 0) {
+				$('#results').append($(
+				'<div class="panel panel-default">' +
+				'	<div class="panel-body">' +
+				'		<h5> No Results. Typo? </h5>' +
+				'	</div>' +
+				'</div>'));
+			}
+		}, delay);
+	};
+
+
+  function invIndexSearch(directory, queryArray) {
+
+    var titleWeight = 1000,  // Value title matches 1000x body matches
+        prefix = '_prefix__';
+
+    // Currently, the inverse index isn't set up to handle
+    // bigrams. Will have a second query array as a workaround
+    var queryUnigrams = [];
+    for (var i = 0; i < queryArray.length; i++) {
+      // Need Array.push to update queryUnigrams in place
+      Array.prototype.push.apply(queryUnigrams, queryArray[i].split(/\s+/));
+    }
+
+    var titleMatches = getTitleMatch(directory, queryUnigrams);
+    var bodyMatches = getBodyMatch(invertedIndex, queryUnigrams);
+
+    var tempMatchedDocumentArray = titleMatches.concat(bodyMatches);
+    var matchedDocuments = {};
+    for (var i = 0; i < tempMatchedDocumentArray.length; i++) {
+      matchedDocuments[prefix + tempMatchedDocumentArray[i]] = 1;
+    }
+    var matchedDocumentsArray = _extractLocalProperties(prefix, matchedDocuments);
+
+    var hitsPerFile = null;
+    if (titleMatches.length || matchedDocumentsArray.length) {
+      hitsPerFile = getHitsPerFile(queryUnigrams, invertedIndex, matchedDocumentsArray);
+    }
+
+    var results = [];
+		_.forEach(_.pick(directory, matchedDocumentsArray), 
+              function(content, title) {
+      // sort by title matches first, then the num of snippets. Can use a big number to weight title matching.
+			var noBreaks = content.text.split('\n').join(' ');
+
+      // May not be important to determine the precise number of hits per title;
+      // it's not clear that having >1 title hit makes a document more pertinent
+			var titleMatches = getMatches(title.split('_').join(' '), queryArray);
+			var bodySnippets = getSnippets(noBreaks, queryArray);
+
+      // Calculate number of hits per file
+			var bodyMatchNum = 0;
+			for (var i = 0; i < queryUnigrams.length; i++) {
+        // This introduces something of a bug - we double count `renal` and `cell`
+        // if a user enters "renal cell"
+				bodyMatchNum += hitsPerFile[title][queryArray[i]];
+			}
+
+			if (bodySnippets != null || (titleMatches.length > 0 && content.text == '')) {
+				var result = {
+					title: title,
+					snippets: bodySnippets,
+
+					link: content.localPath || content.webPath,
+					local: content.localPath != null,
+
+					titleMatches: titleMatches.length,
+					bodyMatchNum: bodyMatchNum
+				};
+
+				results.push(result);
+
+				results = _.sortBy(results, function(n) { 
+					return -(n.titleMatches * titleWeight + n.bodyMatchNum);
+				});
+			}
+		});
+    return results;
+  }
+
+  function getTitleMatch(directory, queryArray) {
+    // queries - array of comma-delimited queries
+
+    // Loop through filenames (keys) of directory.js to find matching titles
+    //
+    // In this case, we don't really care if there are multiple matches, since
+    // a title that repeats a query twice isn't obviously more interesting
+    // than a title that only has one instance of a query.
+    var matchingDocuments = [];
+    for (var i = 0; i < queryArray.length; i++) {
+      for (var documentTitle in directory) {
+        if (documentTitle.toLowerCase().indexOf(queryArray[i]) >= 0) {
+          matchingDocuments.push(documentTitle);
+        }
+      }
+    }
+    return matchingDocuments;
+  }
+
+  function getBodyMatch(invertedIndex, queryArray) {
+    // Return names of documents containing any whole string found
+    // in queryArray
+    var prefix = '_prefix__';
+
+    var tempMatchedDocuments = {}; // 'set' of matched documents
+    for (var i = 0; i < queryArray.length; i++) {
+
+      var docList = invertedIndex[queryArray[i]];
+      if (typeof docList === 'undefined') {
+        continue;
+      }
+      for (var j = 0; j < docList.length; j++) {
+        tempMatchedDocuments[prefix + docList[j].file] = 1;
+      }
+    }
+    return _extractLocalProperties(prefix, tempMatchedDocuments);
+  }
+
+  function getHitsPerFile(queryArray, invertedIndex, matchedDocuments) {
+    // Return a map of filename to {query: queryFrequency} objects
+    
+    resultsMap = {};
+    for (var i = 0; i < matchedDocuments.length; i++) {
+      resultsMap[matchedDocuments[i]] = {};
+    }
+
+    for (var i = 0; i < queryArray.length; i++) {
+      var q = queryArray[i];
+      var allQueryContainingDocs = invertedIndex[q];
+      if (typeof allQueryContainingDocs === 'undefined') {
+        continue;
+      }
+
+      for (var j = 0; j < allQueryContainingDocs.length; j++) {
+        var f = allQueryContainingDocs[j].file;
+        if (f in resultsMap) {
+          resultsMap[f][q] = allQueryContainingDocs[j].freq;
+        }
+      }
+    }
+    return resultsMap;
+  }
+
+  function _extractLocalProperties(prefix, o) {
+    // Return an array of properties in `o` that
+    // begin with `prefix`
+    var properties = [];
+    for (var k in o) {
+      if (k.startsWith(prefix)) {
+        properties.push(k.slice(prefix.length, k.length));
+      }
+    }
+    return properties
+  }
+
+	function getSearchResults(query) {
+		// Split up query by commas
+		var splitQuery = query.toLowerCase().split(',');
+		splitQuery = _.filter(splitQuery, function(n) {
+			return n.split(' ').join('').length > 1;
+		});
+
+    // `directory` obtained from global scope
+		return invIndexSearch(directory, splitQuery);
+	};
+
+	// Gets a list of text matches for a given document
+  // XXX Only used to find a match in the title
+	function getMatches(text, queries) {
+		var allMatches = [];
+
+		var nextIndexes = {};
+		queries.forEach(function (q, i) {
+			nextIndexes[q] = text.toLowerCase().indexOf(q, (nextIndexes[q] != null ? nextIndexes[q] + 1 : 0));
+		});
+		var closest = _.sortBy(
+        _.filter(
+          _.pairs(nextIndexes), function (n) { return n[1] >= 0;}), 
+        function(n) { return n[1];}
+        )[0];
+
+    // XXX Unnecessary, as this fxn only is used to search titles (which will rarely have multiple
+    // instances of an interesting query
+		while (closest != null) {
+			allMatches.push(closest);
+			queries.forEach(function (q, i) {
+				nextIndexes[q] = text.toLowerCase().indexOf(q, (nextIndexes[q] != null ? nextIndexes[q] + 1 : 0));
+			});
+			closest = _.sortBy(_.filter(_.pairs(nextIndexes), function (n) { return n[1] >= 0;}), function(n) { return n[1];})[0];
+		}
+		return allMatches;
+	};
+
+	// Generates bolded snippets by searching the content's body
+	function getSnippets(text, queries) {
+    // text - content from a PDF
+    // queries - list of queries inserted into search box
+
+		var containsAllParts = true;
+		queries.forEach(function(n) {
+			if (text.toLowerCase().indexOf(n) == -1) {
+				containsAllParts = false;
+			}
+		});
+
+		if (!containsAllParts) {
+			return;  // not all query parts match in the text.
+		}		
+
+		var nextIndexes = {};
+		var snippets = [];
+
+		var first = true;
+    var queryContextLength = 1000 // Chars to return around query
+		var closest;
+    var lowerCaseText = text.toLowerCase()
+    // Run through text looking for instances of either query. Make a snippet of the
+    // closest result. Reset results after each loop (this may discount cases where the
+    // second query occurs just after the first query, but isn't an important bug)
+		while ((closest != null && snippets.length < maxSnippets) || first) {
+
+			queries.forEach(function (q, i) {
+				nextIndexes[q] = {
+          // Start from the previous search's index or from the beginning. Record the index of any
+          // new match
+					index: lowerCaseText.indexOf(q, (nextIndexes[q] != null ? nextIndexes[q].index + 1 : 0)),
+					query: q
+				};
+			});
+      // Remove queries that did not match (? this should never occur down here...), and sort
+      // resulting record(s) by index
+			closest = _.sortBy(_.filter(_.pairs(nextIndexes), function (n) { return n[1].index >= 0;}), 'index')[0];
+
+			if (closest != null) {
+        // We don't want to search all the way back to index 0 if we can avoid it (most of the
+        // time, we expect there to be a lot of text between index 0 and closest.index.
+        //
+        // Check if we can get away with just looking at the last `queryContextLength` characters
+        var beforeIndex = (closest[1].index - queryContextLength) < 0 ? 0 : (closest[1].index - queryContextLength);
+        var afterIndex = ((closest[1].index + closest[1].query.length + queryContextLength) > text.length) ? text.length : (closest[1].index + closest[1].query.length + queryContextLength);
+
+        var before = text.substring(beforeIndex, closest[1].index).match(/[^\.\-\–\?]*$/)[0];
+				var after = text.substring(closest[1].index + closest[1].query.length, afterIndex).match(/.[^\.\-\–\?]+/)[0];
+
+				var newSnippet = before + '<b>' + closest[1].query + '</b>' + after;
+				if (snippets.indexOf(newSnippet) == -1) {
+					snippets.push(newSnippet);
+				}
+			}
+
+			first = false;
+		}
+
+		return snippets.length > 0 ? snippets : null;		
+	}
+
+
+});
+
+
+</script>
+</body>
+</html>
