@@ -17,7 +17,9 @@ Zipping the `PathwaysCompass_XX` folder before sharing is advisable.
 Dependencies:
 
 > npm install
+
 > brew install poppler
+
 > brew install gnu-sed --with-default-names
 
 To run,
