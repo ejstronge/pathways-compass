@@ -2,7 +2,6 @@
 
 # Pathways Compass Generator
 
-
 ## Usage
 
 Put all PDF content to be searched in the `original_content` directory. Create this directory first
@@ -24,6 +23,5 @@ Dependencies:
 To run,
 
 > node compassGenerator.js
-
 
 (c) 2015-2016 Gavin Ovsak, Edward Stronge. All rights reserved.
