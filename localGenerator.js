@@ -37,13 +37,13 @@ while (folderName == null) {
 fs.mkdirSync(folderName);
 exec('find original_content -name "*.txt.*" -delete');
 fs.copySync('original_content', folderName + '/content');
-fs.copySync('resources', folderName + '/resources');
-fs.copySync('compass.html', folderName + '/compass.html');
+fs.copySync('local_prototype/resources', folderName + '/resources');
+fs.copySync('local_prototype/compass.html', folderName + '/compass.html');
 
 // create txt files for each pdf
 
 var convertPDFtoTextinDir = function(dir) {
-  console.log('Converting PDF files in ' + dir);
+  // console.log('Converting PDF files in ' + dir);
   var dirContent = fs.readdirSync(dir);
   for (var i = 0; i < dirContent.length; i++) {
     try {
@@ -124,37 +124,42 @@ var exploreDir = function(dir) {
         if (extension.endsWith('.txt')) {
           directory[minusExtension].text = fs.readFileSync(folderName + '/content/' + fullPath, "utf8");
 
-          // Populate inverted index
-          var tokens = fs.readFileSync(folderName + '/content/' + fullPath + '.tokens', "utf8").split(/\r?\n/);
-          for (var i = 0; i < tokens.length; i++) {
+          try {
 
-            // Avoid lines without text
-            if (tokens[i] + '' === '') {
-              continue
-            }
+            // Populate inverted index
+            var tokens = fs.readFileSync(folderName + '/content/' + fullPath + '.tokens', "utf8").split(/\r?\n/);
+            for (var i = 0; i < tokens.length; i++) {
 
-            // Match the word frequency information from `uniq -c`
-            // Example:
-            // `     35 alveolar` 
-            // and `1045 patients`
-            var tokenInfo = tokens[i].match(/^\s*(\d+)\s+(.*)$/);
-            var token = tokenInfo[2];
-            var frequency = tokenInfo[1];
-            // Token exclusion criteria:
-            // - Empty string
-            // - Very long string (things bigger than dysdiachokinesis unlikely to be searched for...
-            // - Strings containing more than 4 numbers (e.g., "a1413302")
-            // - Strings containing over 5 letters and then >2 digits (e.g., "abstinence109")
-            // - Strings starting with a letter followed by a digit and then >1 letters (e.g., "a8vator")
-            // - Strings beginning in a single character followed by only digits
-            if (token === '' || token.length >= 16 || token.match(/\d\d\d\d/) || token.match(/[a-z]{5}\d\d+/) ||
-                token.match(/[a-z]{1,2}\d+[a-z]+/) || token.match(/^[a-z]\d+$/)) {
-              continue
-            } else if (token in invertedIndex) {
-              invertedIndex[token].push({'file': minusExtension, 'freq':frequency});
-            } else {
-              invertedIndex[token] = [{'file': minusExtension, 'freq':frequency}];
+              // Avoid lines without text
+              if (tokens[i] + '' === '') {
+                continue
+              }
+
+              // Match the word frequency information from `uniq -c`
+              // Example:
+              // `     35 alveolar` 
+              // and `1045 patients`
+              var tokenInfo = tokens[i].match(/^\s*(\d+)\s+(.*)$/);
+              var token = tokenInfo[2];
+              var frequency = tokenInfo[1];
+              // Token exclusion criteria:
+              // - Empty string
+              // - Very long string (things bigger than dysdiachokinesis unlikely to be searched for...
+              // - Strings containing more than 4 numbers (e.g., "a1413302")
+              // - Strings containing over 5 letters and then >2 digits (e.g., "abstinence109")
+              // - Strings starting with a letter followed by a digit and then >1 letters (e.g., "a8vator")
+              // - Strings beginning in a single character followed by only digits
+              if (token === '' || token.length >= 16 || token.match(/\d\d\d\d/) || token.match(/[a-z]{5}\d\d+/) ||
+                  token.match(/[a-z]{1,2}\d+[a-z]+/) || token.match(/^[a-z]\d+$/)) {
+                continue
+              } else if (token in invertedIndex) {
+                invertedIndex[token].push({'file': minusExtension, 'freq':frequency});
+              } else {
+                invertedIndex[token] = [{'file': minusExtension, 'freq':frequency}];
+              }
             }
+          } catch (e) {
+            console.log('Error at file ', folderName + '/content/' + fullPath, e);
           }
 
         } else if (extension.endsWith('.webloc')) {
