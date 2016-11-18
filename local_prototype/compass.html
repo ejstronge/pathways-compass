@@ -6,6 +6,7 @@ HMS Pathways Compass
 </title>
 <link rel="stylesheet" href="./resources/bootstrap.min.css">
 <link rel="stylesheet" href="./resources/bootstrap-theme.min.css">
+<link rel="stylesheet" href="./resources/compass-extras.css">
 <script src="./resources/lodash.min.js"></script>
 <script src="./resources/jquery-2.1.4.js"></script>
 <script src="./resources/bootstrap.min.js"></script>
@@ -25,8 +26,14 @@ HMS Pathways Compass
 	<!-- Search Bar-->
 	<div class="row"> 
 		<input id="search" type="text" class="form-control" placeholder="ex: Cancer, Immunotherapy" aria-describedby="basic-addon1"/>
+
 	</div>
-	<br>
+  <!-- TODO put an arrow icon to give user option not to filter -->
+  <div id="filter-holder">
+  </div>
+
+  </div>
+
 	<!-- Results Are Put Here -->
 	<div id="results">
 	</div>
@@ -40,6 +47,7 @@ var maxSnippets = 5; // max # of snippets to show below
 var maxResults = 100; // max results to show
 
 var results;
+var topicPreferences = {};
 var lastClick = new Date();
 var timeout;
 
@@ -64,11 +72,32 @@ $(document).ready(function() {
 
 			console.log('Search Results for', query, results.slice(0, 100));
 
+
+      // Example match:
+      //
+      // [ 'Homeostasis I/Overview of Obstructive Lung Disease, COPD and Asthma/Overview of
+      // Obstructive Lung Disease, COPD and Asthma- Homeostas.pdf',
+      // 'Homeostasis I',
+      // index: 0,
+      // input: 'Homeostasis I/Overview of Obstructive Lung Disease, COPD and Asthma/Overview of
+      // Obstructive Lung Disease, COPD and Asthma- Homeostas.pdf' ]
+      var topicMatch = /^([^//]*).*$/
+      var allTopics = {};  // Store directory names in this make-shift set
+      var prefix = '__prefix__';
+
 			results.slice(0, maxResults).forEach(function(n) {
+
 				var linkHTML = '';
 				
 				// Link locally or to an external resource
 				if (n.local) {
+          // XXX Not sure how to implement this on a mobile platform. Cowardly only considering
+          // local cases
+          var topic = n.link.match(topicMatch);  
+          if (typeof topic !== 'undefined') {
+            allTopics[prefix + topic[1]] = 1;
+          }
+
 					linkHTML += '<a href="./content/'+n.link+'" target="_blank">'+n.link+'</a>';
 				} else {
 					linkHTML += '<a href="'+n.link+'" target="_blank">'+n.title+'</a>';
@@ -89,8 +118,30 @@ $(document).ready(function() {
 				$('#results').append($(newResult));
 			});
 
+      // Add checkboxes for filtering here
+      var topicArray = _extractLocalProperties(prefix, allTopics);
+
+      $('#filter-holder').empty();
+      for (var i = 0; i < topicArray.length; i += 4) {
+        var newButtons = '<div class="row filter-button-array">';
+        var arrayLimit = Math.min(i + 4, topicArray.length);
+
+        for (var j = i; j < arrayLimit; j++) {
+          newButtons += '' +
+            '<div class="col-lg-3">' +
+            '<button type="button" class="btn outline active btn-primary"></button>' +
+            '<span class="filter-button btn-label">' + topicArray[j] + '</span>' +
+            '</div>';
+        }
+        newButtons += '</div>';
+
+        $('#filter-holder').append($(newButtons));
+      }
+      
+
+
+
 			if (results.length == 0 && query.length != 0) {
-        // Filter results based on file source here
 				$('#results').append($(
 				'<div class="panel panel-default">' +
 				'	<div class="panel-body">' +
