@@ -32,7 +32,6 @@ HMS Pathways Compass
   <div id="filter-holder">
   </div>
 
-  </div>
 
 	<!-- Results Are Put Here -->
 	<div id="results">
@@ -99,6 +98,8 @@ $(document).ready(function() {
           }
 
 					linkHTML += '<a href="./content/'+n.link+'" target="_blank">'+n.link+'</a>';
+          var pdfFileLink = './content/' + n.link;
+					linkHTML += '<a href="' + pdfFileLink + '" target="_blank">'+n.link+'</a>';
 				} else {
 					linkHTML += '<a href="'+n.link+'" target="_blank">'+n.title+'</a>';
 				}
@@ -108,7 +109,17 @@ $(document).ready(function() {
 				'		<h5>'+linkHTML+'</h5>';
 
 				if (n.local) {
-					newResult += '		Snippets:<br><p>'+(n.snippets || []).slice(0, 5).join('</p><br><p>')+'</p>';
+          newResult +=  '		Snippets (click a snippet to access document):<br><ul>';
+          for (var i = 0; i < n.snippets.length; i++) {
+            // Example `n`: {text: 'Here is a query with context.', pageNo: 5}
+            newResult += (
+            '<li> <a class="snippet" href="' + pdfFileLink + '#page=' + n.snippets[i].pageNo + '" target="_blank">' +
+              n.snippets[i].text +
+            '</a></li><br>' // should eventually style this and add padding-bottom
+            );
+          }
+          newResult +=  '</ul>';
+
 				} else {
 					newResult += '		Link to '+n.link+'<br>';
 				}
@@ -308,8 +319,8 @@ $(document).ready(function() {
 		return invIndexSearch(directory, splitQuery);
 	};
 
-	// Gets a list of text matches for a given document
-  // XXX Only used to find a match in the title
+	// Gets a list of text matches for a given document. Only
+  // used to look for title matches
 	function getMatches(text, queries) {
 		var allMatches = [];
 
@@ -352,11 +363,15 @@ $(document).ready(function() {
 		}		
 
 		var nextIndexes = {};
+		var snippetTextArray = [];
 		var snippets = [];
 
 		var first = true;
-    var queryContextLength = 1000 // Chars to return around query
+    var queryContextLength = 1000; // Chars to return around query
+    var lastSnippetPage = 1;
 		var closest;
+    var lastClosest = [null, {index:0, query:null}];
+
     var lowerCaseText = text.toLowerCase()
     // Run through text looking for instances of either query. Make a snippet of the
     // closest result. Reset results after each loop (this may discount cases where the
@@ -365,30 +380,41 @@ $(document).ready(function() {
 
 			queries.forEach(function (q, i) {
 				nextIndexes[q] = {
-          // Start from the previous search's index or from the beginning. Record the index of any
-          // new match
-					index: lowerCaseText.indexOf(q, (nextIndexes[q] != null ? nextIndexes[q].index + 1 : 0)),
+          // Start from the previous search's index. Record the index of any new match
+					index: lowerCaseText.indexOf(q, (nextIndexes[q] != null ? nextIndexes[q].index + 1 : lastClosest[1].index)),
 					query: q
 				};
 			});
-      // Remove queries that did not match (? this should never occur down here...), and sort
-      // resulting record(s) by index
-			closest = _.sortBy(_.filter(_.pairs(nextIndexes), function (n) { return n[1].index >= 0;}), 'index')[0];
+      // Of the queries were there was a match, we consider the match with the lowest index. The
+      // innermost function unrolls the map, saving us from having to specify its keys
+			closest = _.sortBy(_.filter(_.pairs(nextIndexes), function (n) { return n[1].index >= lastClosest[1].index;}), 'index')[0];
 
 			if (closest != null) {
+        // Logic: consider the case where multiple snippets are taken from the same page, say page 2. No
+        // form feed characters will intercede, but ''.split('\f').length is 1. Thus, we decrement
+        // the result of the above function call by 1.
+        var snippetPage = lastSnippetPage + lowerCaseText.slice(lastClosest[1].index, closest[1].index).split('\f').length - 1;
+        var lastSnippetPage = snippetPage;
+        lastClosest = closest;
+
         // We don't want to search all the way back to index 0 if we can avoid it (most of the
         // time, we expect there to be a lot of text between index 0 and closest.index.
         //
-        // Check if we can get away with just looking at the last `queryContextLength` characters
+        // We try to get away with just looking at the last `queryContextLength` characters
         var beforeIndex = (closest[1].index - queryContextLength) < 0 ? 0 : (closest[1].index - queryContextLength);
-        var afterIndex = ((closest[1].index + closest[1].query.length + queryContextLength) > text.length) ? text.length : (closest[1].index + closest[1].query.length + queryContextLength);
-
         var before = text.substring(beforeIndex, closest[1].index).match(/[^\.\-\–\?]*$/)[0];
+
+        var afterIndex = ((closest[1].index + closest[1].query.length + queryContextLength) > text.length) 
+          ? text.length 
+          : (closest[1].index + closest[1].query.length + queryContextLength);
 				var after = text.substring(closest[1].index + closest[1].query.length, afterIndex).match(/.[^\.\-\–\?]+/)[0];
 
-				var newSnippet = before + '<b>' + closest[1].query + '</b>' + after;
-				if (snippets.indexOf(newSnippet) == -1) {
-					snippets.push(newSnippet);
+        var newSnippet = before + '<b>' + closest[1].query + '</b>' + after + '. <i>(Page ' + snippetPage + ')</i>';
+        // NOTE Only showing one result per page (if a user is interested, s/he will likely
+        // already know from the first snippet shown.
+				if (snippetTextArray.indexOf('Page ' + snippetPage) == -1) {
+          snippetTextArray.push('Page ' + snippetPage);
+          snippets.push({'text': newSnippet, 'pageNo': snippetPage});
 				}
 			}
 

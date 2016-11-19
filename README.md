@@ -32,6 +32,7 @@ To run,
 - Refactor code to facilitate testing (thinking of using mocha.js as test suite)
 - Filter search results by folder containing each result PDF file
 - Link directly to pages in each PDF
+    * Link to the module/dir associated with each PDF
 - Dedicated mobile-support
 - Specify number of snippets to return per document in search
 

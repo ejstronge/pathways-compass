@@ -1,4 +1,3 @@
-
 .btn {
     background: none;
     padding: 12px 22px;
@@ -31,3 +30,12 @@
 }
 
 
+a.snippet {
+    color: #333;
+    text-decoration: none;
+}
+
+a.snippet:hover {
+    color: #333;
+    text-decoration: underline;
+}
