@@ -47,14 +47,25 @@ var maxResults = 100; // max results to show
 
 var results;
 var topicPreferences = {};
+var topicButtons = [];
 var lastClick = new Date();
 var timeout;
 
 $(document).ready(function() {
 		
+  $('.btn').button();
 	$('#search').on('input', inputChange);
 	inputChange();
 
+  function toggleTopicButtion(e) {
+    console.log(e.target);
+    $( e.target ).toggleClass('selected');
+  }
+
+  function refilterSearchResults() {
+    console.log('would refilter here for');
+  }
+  
 	function inputChange() {
 		query = $('#search').val();
 		$('#results').empty();
@@ -133,6 +144,7 @@ $(document).ready(function() {
       var topicArray = _extractLocalProperties(prefix, allTopics);
 
       $('#filter-holder').empty();
+      $('#filter-holder').off('click');
       for (var i = 0; i < topicArray.length; i += 4) {
         var newButtons = '<div class="row filter-button-array">';
         var arrayLimit = Math.min(i + 4, topicArray.length);
@@ -140,12 +152,16 @@ $(document).ready(function() {
         for (var j = i; j < arrayLimit; j++) {
           newButtons += '' +
             '<div class="col-lg-3">' +
-            '<button type="button" class="btn outline active btn-primary"></button>' +
+            '<button type="button" class="btn btn-outline btn-primary selected" id=' + topicArray[j].split(/\s+/).join('')  + '></button>' +
             '<span class="filter-button btn-label">' + topicArray[j] + '</span>' +
             '</div>';
+          // Binding click events to #filter-holder, which currently exists. The 
+          // buttons have not been added to the DOM
+          $('#filter-holder').on('click', '#' + topicArray[j].split(/\s+/).join(''), toggleTopicButtion);
         }
         newButtons += '</div>';
 
+        console.log(topicArray);
         $('#filter-holder').append($(newButtons));
       }
       
