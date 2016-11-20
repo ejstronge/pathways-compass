@@ -74,7 +74,7 @@ $(document).ready(function() {
   }
 
   function refilterSearchResults() {
-    console.log('would refilter here for');
+    console.log('start refiltering here');
   }
   
 	function inputChange() {
@@ -89,13 +89,13 @@ $(document).ready(function() {
 			$('#results').empty();
 			
 			results = getSearchResults(query);
-			console.log('Search Results for', query, results.slice(0, 100), results.length);
+			console.log('Search Results for', query, results, results.length);
       var resultElements = makeResultHTMLElements(results);
-      // TODO FIXME Boxes shouldn't be visible initially
-      makeTopicCheckboxHTMLElements();
 
       $('#filter-holder').empty();  // TODO save users preferences re: toggle state before emptying
       $('#filter-holder').off('change');
+      // TODO FIXME Boxes shouldn't be visible initially
+      makeTopicCheckboxHTMLElements();
 
       $('#results').append(resultElements);
 
@@ -135,9 +135,7 @@ $(document).ready(function() {
         $('#filter-holder').on('change', '#' + collapsedTopic, toggleTopicButtion);
       }
       newButtons += '</div></div>';
-
     }
-    console.log(newButtons);
     $('#filter-holder').append($(newButtons));
   }
 
@@ -151,9 +149,10 @@ $(document).ready(function() {
     resultsData.slice(0, maxResults).forEach(function(r) {
 
       if (!(r.topic in cachedResultsByTopic)) {
-        cachedResultsByTopic[r.topic] = [];
+        cachedResultsByTopic[mapPrefix + r.topic] = [];
       }
-      cachedResultsByTopic[r.topic].push(r);
+      // FIXME need to think about when to remove the old data
+      cachedResultsByTopic[mapPrefix + r.topic].push(r);
 
       var newResult = '<div class="panel panel-default">' + '	<div class="panel-body">'
       if (r.local) {
