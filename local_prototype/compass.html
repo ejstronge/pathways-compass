@@ -151,7 +151,6 @@ $(document).ready(function() {
     }
     newButtons += '</div></div>';
     $('#filter-holder').append($(newButtons));
-    
   }
 
   function _getTopicPreferenceMapKey(t) {
@@ -167,11 +166,12 @@ $(document).ready(function() {
      */
     cachedResultsByTopic = {};  // Clear old data
     resultsData.forEach(function(r) {
-
-      if (!((mapPrefix + r.topic) in cachedResultsByTopic)) {
-        cachedResultsByTopic[mapPrefix + r.topic] = [];
+      if (r.topic != null) {
+        if (!((mapPrefix + r.topic) in cachedResultsByTopic)) {
+          cachedResultsByTopic[mapPrefix + r.topic] = [];
+        }
+        cachedResultsByTopic[mapPrefix + r.topic].push(r);
       }
-      cachedResultsByTopic[mapPrefix + r.topic].push(r);
     });
   };
 
@@ -283,10 +283,7 @@ $(document).ready(function() {
 				var result = {
 					title: title,
 					snippets: bodySnippets,
-          // Not going to account for possible cases of content.localpath
-          // being `null`, as these conditions should not occur and warrant
-          // further evaluation
-          topic: content.localPath.match(/^([^/]+).*/)[1],
+          topic: content.localPath != null ? content.localPath.match(/^([^/]+).*/)[1] : null,
 
           link: content.localPath || content.webPath,
           local: content.localPath != null,
