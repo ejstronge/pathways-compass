@@ -149,7 +149,7 @@ var exploreDir = function(dir) {
               // - Strings containing over 5 letters and then >2 digits (e.g., "abstinence109")
               // - Strings starting with a letter followed by a digit and then >1 letters (e.g., "a8vator")
               // - Strings beginning in a single character followed by only digits
-              if (token === '' || token.length >= 16 || token.match(/\d\d\d\d/) || token.match(/[a-z]{5}\d\d+/) ||
+              if (token === '' || token.length >= 20 || token.match(/\d\d\d\d/) || token.match(/[a-z]{5}\d\d+/) ||
                   token.match(/[a-z]{1,2}\d+[a-z]+/) || token.match(/^[a-z]\d+$/)) {
                 continue
               } else if (token in invertedIndex) {
