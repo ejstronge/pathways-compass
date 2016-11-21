@@ -144,13 +144,14 @@ $(document).ready(function() {
     var topicArray = _.sortBy(Object.keys(cachedResultsByTopic));
 
     var checkboxHTMLElements = [];
-    for (var i = 0; i < topicArray.length; i += 4) { // Only display four items per line
-      var newButtons = '<div class="filter-button-array">' +
-        '<div class="btn-group btn-group btn-group-justified" data-toggle="buttons">';
+    var newButtons = '<div class="filter-button-array">' +
+      '<div class="btn-group btn-group btn-group-justified" style="display: inline-block; width: 100%;" data-toggle="buttons">';
+    
+    for (var i = 0; i < topicArray.length; i ++) { // Only display four items per line
 
-      var arrayLimit = Math.min(i + 4, topicArray.length);
-      for (var j = i; j < arrayLimit; j++) {
-        var collapsedTopic = topicArray[j].split(/\s+/).join('');
+      // var arrayLimit = Math.min(i + 4, topicArray.length);
+      // for (var j = i; j < arrayLimit; j++) {
+        var collapsedTopic = topicArray[i].split(/\s+/).join('');
 
         if (topicPreferences[collapsedTopic] != null) {
           checked = topicPreferences[collapsedTopic];
@@ -159,19 +160,18 @@ $(document).ready(function() {
         }
 
         newButtons += '' +
-            '<label class="btn active" id="' + collapsedTopic +'">' +
+            '<label class="btn active" id="' + collapsedTopic +'" style="display: inline-table;">' +
               '<input type="checkbox" name="' + collapsedTopic + '" ' + (checked ? 'checked' : '') +'>' +
                 '<i class="fa fa-square-o fa-2x"></i><i class="fa fa-check-square-o fa-2x"></i>' + 
-                '<span class="topic-text">  ' + topicArray[j] + '</span>' +
+                '<span class="topic-text">  ' + topicArray[i] + '</span>' +
             '</label>';
         // Binding click events to #filter-holder, which currently exists. The 
         // buttons have not been added to the DOM
         $('#filter-holder').on('change', '#' + collapsedTopic, toggleTopicButtion);
-      }
-      newButtons += '</div></div>';
-      console.log(newButtons);
-      $('#filter-holder').append($(newButtons));
     }
+    newButtons += '</div></div>';
+    console.log(newButtons);
+    $('#filter-holder').append($(newButtons));
     
   }
 
