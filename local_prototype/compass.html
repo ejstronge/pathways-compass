@@ -4,33 +4,44 @@
 <title>
 HMS Pathways Compass
 </title>
-<link rel="stylesheet" href="./resources/bootstrap.min.css">
-<link rel="stylesheet" href="./resources/bootstrap-theme.min.css">
-<link rel="stylesheet" href="./resources/compass-extras.css">
-<script src="./resources/lodash.min.js"></script>
-<script src="./resources/jquery-2.1.4.js"></script>
-<script src="./resources/bootstrap.min.js"></script>
+<link rel="stylesheet" href="./resources/css/bootstrap.min.css">
+<link rel="stylesheet" href="./resources/css/bootstrap-theme.min.css">
+<link rel="stylesheet" href="./resources/css/font-awesome.min.css">
+<link rel="stylesheet" href="./resources/css/compass-extras.css">
+<script src="./resources/js/lodash.min.js"></script>
+<script src="./resources/js/jquery-2.1.4.js"></script>
+<script src="./resources/js/bootstrap.min.js"></script>
 <script src="./directory.js"></script>
 <script src="./invertedIndex.js"></script>
 </head>
 <body>
 
 <div class="container">
-	<!-- Title Bar -->
-	<div class="row">
-		<div class="page-header col-lg-12">
-			<h1>Pathways MedEd Compass <small><i> for the wards and beyond!</i></h1>  
-			<h5 style="color:gray;margin-top:20px;">#ProTip: Separate phrases by commas to find documents with all of these phrases</h5>
-		</div>
-	</div>
-	<!-- Search Bar-->
-	<div class="row"> 
-		<input id="search" type="text" class="form-control" placeholder="ex: Cancer, Immunotherapy" aria-describedby="basic-addon1"/>
-	</div>
-	<br>
-	<!-- Results Are Put Here -->
-	<div id="results">
-	</div>
+  <!-- Title Bar -->
+  <div class="row">
+    <div class="page-header col-lg-12">
+      <h1>Pathways MedEd Compass <small><i> for the wards and beyond!</i></h1>  
+      <h5 style="color:gray;margin-top:20px;">#ProTip: Separate phrases by commas to find documents with all of these phrases</h5>
+    </div>
+  </div>
+
+  <!-- Search Bar-->
+
+  <div class="row"> 
+    <div class="col-xs-12">
+      <input id="search" style="display: inline-block; width: calc(100% - 120px); margin-right: 10px;" type="text" class="form-control" placeholder="ex: Cancer, Immunotherapy"/>
+      <button class="btn btn-sm" id="filter-toggle">
+      <i class="fa fa-minus-circle"></i> Toggle filters</button>
+    </div>
+  </div>
+
+  <div id="filter-holder" class=".collapse">
+  </div>
+
+
+  <!-- Results Are Put Here -->
+  <div id="results" style="margin-top: 10px;">
+  </div>
 </div>
 
 <script>
@@ -39,16 +50,44 @@ HMS Pathways Compass
 var delay = 300; // ms to wait before searching
 var maxSnippets = 5; // max # of snippets to show below
 var maxResults = 100; // max results to show
+var mapPrefix = '__prefix__';
 
 var results;
+var cachedResultsByTopic = {};
+// Use helper function `_getTopicPreferenceMapKey` to generate keys for `topicPreferences`
+var topicPreferences = localStorage.getItem('prefs') ? JSON.parse(localStorage.getItem('prefs')) : {};
 var lastClick = new Date();
 var timeout;
 
-$(document).ready(function() {
-		
-	$('#search').on('input', inputChange);
-	inputChange();
 
+$(document).ready(function() {
+    
+  $('.btn').button();
+  $('#search').on('input', inputChange);
+  $('#filter-toggle').click(function() {
+    $('#filter-toggle i').attr('class', 
+      $('#filter-holder').is(':visible') ? 
+      'fa fa-plus-circle' : 
+      'fa fa-minus-circle')
+    $('#filter-holder').slideToggle();
+
+  });
+
+  inputChange();
+
+  function toggleTopicButtion(e) {
+    topicPreferences[_getTopicPreferenceMapKey(e.target.name)] = e.target.checked;
+    refilterSearchResults();
+    localStorage.setItem('prefs', JSON.stringify(topicPreferences));
+  }
+
+  function refilterSearchResults() {
+    var newElements = getResultHTMLElements(
+      _.sortBy(_extractLocalProperties(mapPrefix, cachedResultsByTopic)));
+    $('#results').empty();
+    $('#results').append(newElements);
+  }
+  
 	function inputChange() {
 		query = $('#search').val();
 		$('#results').empty();
@@ -58,65 +97,145 @@ $(document).ready(function() {
 		lastClick = new Date();
 		clearTimeout(timeout);
 		timeout = setTimeout(function() {
-			$('#results').empty();
 			
-			// Implemented below
 			results = getSearchResults(query);
+      refreshResultsCache(results);
+			console.log('Search Results for', query, results, results.length);
 
-			console.log('Search Results for', query, results.slice(0, 100));
+      // Use lodash to ensure stable sorting. Both inner arguments are globals
+      var topicArray = _.sortBy(_extractLocalProperties(mapPrefix, cachedResultsByTopic));
 
-			results.slice(0, maxResults).forEach(function(n) {
-				var linkHTML = '';
-				
-				// Link locally or to an external resource
-				if (n.local) {
-          var pdfFileLink = './content/' + n.link;
-					linkHTML += '<a href="' + pdfFileLink + '" target="_blank">'+n.link+'</a>';
-				} else {
-					linkHTML += '<a href="'+n.link+'" target="_blank">'+n.title+'</a>';
-				}
+      // TODO FIXME Boxes shouldn't be visible initially
 
-				var newResult = '<div class="panel panel-default">' +
-				'	<div class="panel-body">' +
-				'		<h5>'+linkHTML+'</h5>';
+      $('#filter-holder').empty();  // TODO save users preferences re: toggle state before emptying
+      $('#filter-holder').off('change');
+      // TODO FIXME Boxes shouldn't be visible initially
+      makeTopicCheckboxHTMLElements(topicArray);
 
-				if (n.local) {
-          newResult +=  '		Snippets (click a snippet to access document):<br><ul>';
-          for (var i = 0; i < n.snippets.length; i++) {
-            // Example `n`: {text: 'Here is a query with context.', pageNo: 5}
+			$('#results').empty();
+      $('#results').append(getResultHTMLElements(topicArray));
+      
+    }, delay);
+  };
+
+  function makeTopicCheckboxHTMLElements(topicArray) {
+
+    var checkboxHTMLElements = [];
+    var newButtons = '<div class="filter-button-array">' +
+      // XXX not sure if the inline-block display is needed vs removing
+      // justified class
+      '<div class="btn-group btn-group btn-group-justified" style="display: inline-block; width: 100%;" data-toggle="buttons">';
+    
+    for (var i = 0; i < topicArray.length; i ++) {
+
+      var currTopic = topicArray[i];
+      var collapsedTopic = currTopic.split(/\s+/).join('');
+
+      if (topicPreferences[_getTopicPreferenceMapKey(collapsedTopic)] != null) {
+        checked = topicPreferences[_getTopicPreferenceMapKey(collapsedTopic)];
+      } else {
+        checked = true;
+      }
+
+      newButtons += '' +
+          '<label class="btn active" id="' + collapsedTopic +'" style="display: inline-table;">' +
+            '<input type="checkbox" name="' + collapsedTopic + '" ' + (checked ? 'checked' : '') +'>' +
+              '<i class="fa fa-square-o fa-2x"></i><i class="fa fa-check-square-o fa-2x"></i>' + 
+                '<span class="topic-text">  ' + currTopic + ' [' + 
+                   cachedResultsByTopic[mapPrefix + currTopic].length +
+                   ']'+ '</span>' +
+            '</label>';
+        // Binding click events to #filter-holder, which currently exists. Note the 
+        // buttons, however, have not yet been added to the DOM
+        $('#filter-holder').on('change', '#' + collapsedTopic, toggleTopicButtion);
+    }
+    newButtons += '</div></div>';
+    $('#filter-holder').append($(newButtons));
+  }
+
+  function _getTopicPreferenceMapKey(t) {
+    /* Remove whitespace and add map prefix for topic names
+     */
+    return mapPrefix + t.split(/\s+/).join('');
+  }
+
+  function refreshResultsCache(resultsData) {
+    /*
+     * Given new results data, populate `cachedResultsByTopic`, a map of 
+     * topics to arrays of related results
+     */
+    cachedResultsByTopic = {};  // Clear old data
+    resultsData.forEach(function(r) {
+      if (r.topic != null) {
+        if (!((mapPrefix + r.topic) in cachedResultsByTopic)) {
+          cachedResultsByTopic[mapPrefix + r.topic] = [];
+        }
+        cachedResultsByTopic[mapPrefix + r.topic].push(r);
+      }
+    });
+  };
+
+  function getResultHTMLElements(topicArray) {
+    // Sort, then return HTML elements using the data cache in 
+    // `cachedResultsByTopic`
+
+    // TODO - should show the checkbox bar by default when a checkbox has been
+    // deselected, but hide in other cases
+
+    // Get preferences and set defaults as needed. Respect existing preferences
+    // TODO persist user preferences beyond the session
+    var filteredResults = [];
+    for (var i = 0; i < topicArray.length; i++) {
+
+      var currTopic = topicArray[i];
+      if (!((_getTopicPreferenceMapKey(currTopic)) in topicPreferences)) {
+        topicPreferences[_getTopicPreferenceMapKey(currTopic)] = true;
+      }
+
+      if (topicPreferences[_getTopicPreferenceMapKey(currTopic)]) {
+        Array.prototype.push.apply(
+          filteredResults, cachedResultsByTopic[mapPrefix + currTopic]);
+      }
+    }
+    console.log('len filter ' + filteredResults.length);
+
+    var resultElements = [];
+    _.sortBy(filteredResults, 'score').slice(0, maxResults).forEach(function(r) {
+
+      var newResult = '<div class="panel panel-default">' + '	<div class="panel-body">'
+
+      if (r.local) {
+        var pdfFileLink = './content/' + r.link;
+
+        newResult += '    <h5><a href="' + pdfFileLink + '" target="_blank">'+r.link+'</a></h5>';
+
+        if (r.snippets) {
+          newResult += '<p>		Snippets (click a snippet to access document):<p><ul>';
+          for (var i = 0; i < r.snippets.length; i++) {
+            // Example: {text: 'Here is a query with context.', pageNo: 5}
             newResult += (
-            '<li> <a class="snippet" href="' + pdfFileLink + '#page=' + n.snippets[i].pageNo + '" target="_blank">' +
-              n.snippets[i].text +
+            '<li> <a class="snippet" href="' + pdfFileLink + '#page=' + r.snippets[i].pageNo + '" target="_blank">' +
+              r.snippets[i].text +
             '</a></li><br>' // should eventually style this and add padding-bottom
             );
           }
-          newResult +=  '</ul>';
+        } else if (!r.snippets) {
+          newResult += '<p>		<i>No matches found in the body of this document</i><p>';
+        }
+        newResult +=  '</ul>  </div></div>';
 
-				} else {
-					newResult += '		Link to '+n.link+'<br>';
-				}
-
-				newResult +='	</div></div>';
-
-				$('#results').append($(newResult));
-			});
-
-			if (results.length == 0 && query.length != 0) {
-				$('#results').append($(
-				'<div class="panel panel-default">' +
-				'	<div class="panel-body">' +
-				'		<h5> No Results. Typo? </h5>' +
-				'	</div>' +
-				'</div>'));
-			}
-		}, delay);
-	};
-
+      } else if (!r.local) {
+        newResult += '		<h5>' + '<a href="'+r.link+'" target="_blank">'+r.title+'</a>' +'</h5>' +
+          '		Link to '+r.link+'<br>';
+      }
+      resultElements.push($(newResult));
+    });
+    return resultElements;
+  };
 
   function invIndexSearch(directory, queryArray) {
 
-    var titleWeight = 1000,  // Value title matches 1000x body matches
-        prefix = '_prefix__';
+    var titleWeight = 1000;  // Value title matches 1000x body matches
 
     // Currently, the inverse index isn't set up to handle
     // bigrams. Will have a second query array as a workaround
@@ -132,9 +251,9 @@ $(document).ready(function() {
     var tempMatchedDocumentArray = titleMatches.concat(bodyMatches);
     var matchedDocuments = {};
     for (var i = 0; i < tempMatchedDocumentArray.length; i++) {
-      matchedDocuments[prefix + tempMatchedDocumentArray[i]] = 1;
+      matchedDocuments[mapPrefix + tempMatchedDocumentArray[i]] = 1;
     }
-    var matchedDocumentsArray = _extractLocalProperties(prefix, matchedDocuments);
+    var matchedDocumentsArray = _extractLocalProperties(mapPrefix, matchedDocuments);
 
     var hitsPerFile = null;
     if (titleMatches.length || matchedDocumentsArray.length) {
@@ -142,45 +261,44 @@ $(document).ready(function() {
     }
 
     var results = [];
-		_.forEach(_.pick(directory, matchedDocumentsArray), 
+    _.forEach(_.pick(directory, matchedDocumentsArray), 
               function(content, title) {
       // sort by title matches first, then the num of snippets. Can use a big number to weight title matching.
-			var noBreaks = content.text.split('\n').join(' ');
+      var noBreaks = content.text.split('\n').join(' ');
 
       // May not be important to determine the precise number of hits per title;
       // it's not clear that having >1 title hit makes a document more pertinent
-			var titleMatches = getMatches(title.split('_').join(' '), queryArray);
-			var bodySnippets = getSnippets(noBreaks, queryArray);
+      var titleMatches = getMatches(title.split('_').join(' '), queryArray);
+      var bodySnippets = getSnippets(noBreaks, queryArray);
 
       // Calculate number of hits per file
-			var bodyMatchNum = 0;
-			for (var i = 0; i < queryUnigrams.length; i++) {
+      var bodyMatchNum = 0;
+      for (var i = 0; i < queryUnigrams.length; i++) {
         // This introduces something of a bug - we double count `renal` and `cell`
         // if a user enters "renal cell"
-				bodyMatchNum += hitsPerFile[title][queryArray[i]];
-			}
+        bodyMatchNum += hitsPerFile[title][queryArray[i]];
+      }
 
 			if (bodySnippets != null || (titleMatches.length > 0 && content.text == '')) {
 				var result = {
 					title: title,
 					snippets: bodySnippets,
+          topic: content.localPath != null ? content.localPath.match(/^([^/]+).*/)[1] : null,
 
-					link: content.localPath || content.webPath,
-					local: content.localPath != null,
+          link: content.localPath || content.webPath,
+          local: content.localPath != null,
 
-					titleMatches: titleMatches.length,
-					bodyMatchNum: bodyMatchNum
-				};
+          titleMatches: titleMatches.length,
+          bodyMatchNum: bodyMatchNum,
+          // Lower is better
+          score: -(titleMatches.length * titleWeight + bodyMatchNum),
+        };
 
-				results.push(result);
-
-				results = _.sortBy(results, function(n) { 
-					return -(n.titleMatches * titleWeight + n.bodyMatchNum);
-				});
-			}
-		});
+        results.push(result);
+      }
+    });
     return results;
-  }
+  };
 
   function getTitleMatch(directory, queryArray) {
     // queries - array of comma-delimited queries
@@ -199,12 +317,11 @@ $(document).ready(function() {
       }
     }
     return matchingDocuments;
-  }
+  };
 
   function getBodyMatch(invertedIndex, queryArray) {
     // Return names of documents containing any whole string found
     // in queryArray
-    var prefix = '_prefix__';
 
     var tempMatchedDocuments = {}; // 'set' of matched documents
     for (var i = 0; i < queryArray.length; i++) {
@@ -214,11 +331,11 @@ $(document).ready(function() {
         continue;
       }
       for (var j = 0; j < docList.length; j++) {
-        tempMatchedDocuments[prefix + docList[j].file] = 1;
+        tempMatchedDocuments[mapPrefix + docList[j].file] = 1;
       }
     }
-    return _extractLocalProperties(prefix, tempMatchedDocuments);
-  }
+    return _extractLocalProperties(mapPrefix, tempMatchedDocuments);
+  };
 
   function getHitsPerFile(queryArray, invertedIndex, matchedDocuments) {
     // Return a map of filename to {query: queryFrequency} objects
@@ -243,7 +360,7 @@ $(document).ready(function() {
       }
     }
     return resultsMap;
-  }
+  };
 
   function _extractLocalProperties(prefix, o) {
     // Return an array of properties in `o` that
@@ -255,29 +372,29 @@ $(document).ready(function() {
       }
     }
     return properties
-  }
+  };
 
-	function getSearchResults(query) {
-		// Split up query by commas
-		var splitQuery = query.toLowerCase().split(',');
-		splitQuery = _.filter(splitQuery, function(n) {
-			return n.split(' ').join('').length > 1;
-		});
+  function getSearchResults(query) {
+    // Split up query by commas
+    var splitQuery = query.toLowerCase().split(',');
+    splitQuery = _.filter(splitQuery, function(n) {
+      return n.split(' ').join('').length > 1;
+    });
 
     // `directory` obtained from global scope
-		return invIndexSearch(directory, splitQuery);
-	};
+    return invIndexSearch(directory, splitQuery);
+  };
 
-	// Gets a list of text matches for a given document. Only
+  // Gets a list of text matches for a given document. Only
   // used to look for title matches
-	function getMatches(text, queries) {
-		var allMatches = [];
+  function getMatches(text, queries) {
+    var allMatches = [];
 
-		var nextIndexes = {};
-		queries.forEach(function (q, i) {
-			nextIndexes[q] = text.toLowerCase().indexOf(q, (nextIndexes[q] != null ? nextIndexes[q] + 1 : 0));
-		});
-		var closest = _.sortBy(
+    var nextIndexes = {};
+    queries.forEach(function (q, i) {
+      nextIndexes[q] = text.toLowerCase().indexOf(q, (nextIndexes[q] != null ? nextIndexes[q] + 1 : 0));
+    });
+    var closest = _.sortBy(
         _.filter(
           _.pairs(nextIndexes), function (n) { return n[1] >= 0;}), 
         function(n) { return n[1];}
@@ -285,60 +402,60 @@ $(document).ready(function() {
 
     // XXX Unnecessary, as this fxn only is used to search titles (which will rarely have multiple
     // instances of an interesting query
-		while (closest != null) {
-			allMatches.push(closest);
-			queries.forEach(function (q, i) {
-				nextIndexes[q] = text.toLowerCase().indexOf(q, (nextIndexes[q] != null ? nextIndexes[q] + 1 : 0));
-			});
-			closest = _.sortBy(_.filter(_.pairs(nextIndexes), function (n) { return n[1] >= 0;}), function(n) { return n[1];})[0];
-		}
-		return allMatches;
-	};
+    while (closest != null) {
+      allMatches.push(closest);
+      queries.forEach(function (q, i) {
+        nextIndexes[q] = text.toLowerCase().indexOf(q, (nextIndexes[q] != null ? nextIndexes[q] + 1 : 0));
+      });
+      closest = _.sortBy(_.filter(_.pairs(nextIndexes), function (n) { return n[1] >= 0;}), function(n) { return n[1];})[0];
+    }
+    return allMatches;
+  };
 
-	// Generates bolded snippets by searching the content's body
-	function getSnippets(text, queries) {
+  // Generates bolded snippets by searching the content's body
+  function getSnippets(text, queries) {
     // text - content from a PDF
     // queries - list of queries inserted into search box
 
-		var containsAllParts = true;
-		queries.forEach(function(n) {
-			if (text.toLowerCase().indexOf(n) == -1) {
-				containsAllParts = false;
-			}
-		});
+    var containsAllParts = true;
+    queries.forEach(function(n) {
+      if (text.toLowerCase().indexOf(n) == -1) {
+        containsAllParts = false;
+      }
+    });
 
-		if (!containsAllParts) {
-			return;  // not all query parts match in the text.
-		}		
+    if (!containsAllParts) {
+      return;  // not all query parts match in the text.
+    }   
 
-		var nextIndexes = {};
-		var snippetTextArray = [];
-		var snippets = [];
+    var nextIndexes = {};
+    var snippetTextArray = [];
+    var snippets = [];
 
-		var first = true;
+    var first = true;
     var queryContextLength = 1000; // Chars to return around query
     var lastSnippetPage = 1;
-		var closest;
+    var closest;
     var lastClosest = [null, {index:0, query:null}];
 
     var lowerCaseText = text.toLowerCase()
     // Run through text looking for instances of either query. Make a snippet of the
     // closest result. Reset results after each loop (this may discount cases where the
     // second query occurs just after the first query, but isn't an important bug)
-		while ((closest != null && snippets.length < maxSnippets) || first) {
+    while ((closest != null && snippets.length < maxSnippets) || first) {
 
-			queries.forEach(function (q, i) {
-				nextIndexes[q] = {
+      queries.forEach(function (q, i) {
+        nextIndexes[q] = {
           // Start from the previous search's index. Record the index of any new match
-					index: lowerCaseText.indexOf(q, (nextIndexes[q] != null ? nextIndexes[q].index + 1 : lastClosest[1].index)),
-					query: q
-				};
-			});
+          index: lowerCaseText.indexOf(q, (nextIndexes[q] != null ? nextIndexes[q].index + 1 : lastClosest[1].index)),
+          query: q
+        };
+      });
       // Of the queries were there was a match, we consider the match with the lowest index. The
       // innermost function unrolls the map, saving us from having to specify its keys
-			closest = _.sortBy(_.filter(_.pairs(nextIndexes), function (n) { return n[1].index >= lastClosest[1].index;}), 'index')[0];
-      
-			if (closest != null) {
+      closest = _.sortBy(_.filter(_.pairs(nextIndexes), function (n) { return n[1].index >= lastClosest[1].index;}), 'index')[0];
+
+      if (closest != null) {
         // Logic: consider the case where multiple snippets are taken from the same page, say page 2. No
         // form feed characters will intercede, but ''.split('\f').length is 1. Thus, we decrement
         // the result of the above function call by 1.
@@ -356,22 +473,22 @@ $(document).ready(function() {
         var afterIndex = ((closest[1].index + closest[1].query.length + queryContextLength) > text.length) 
           ? text.length 
           : (closest[1].index + closest[1].query.length + queryContextLength);
-				var after = text.substring(closest[1].index + closest[1].query.length, afterIndex).match(/.[^\.\-\–\?]+/)[0];
+        var after = text.substring(closest[1].index + closest[1].query.length, afterIndex).match(/.[^\.\-\–\?]+/)[0];
 
         var newSnippet = before + '<b>' + closest[1].query + '</b>' + after + '. <i>(Page ' + snippetPage + ')</i>';
         // NOTE Only showing one result per page (if a user is interested, s/he will likely
         // already know from the first snippet shown.
-				if (snippetTextArray.indexOf('Page ' + snippetPage) == -1) {
+        if (snippetTextArray.indexOf('Page ' + snippetPage) == -1) {
           snippetTextArray.push('Page ' + snippetPage);
           snippets.push({'text': newSnippet, 'pageNo': snippetPage});
-				}
-			}
+        }
+      }
 
-			first = false;
-		}
+      first = false;
+    }
 
-		return snippets.length > 0 ? snippets : null;		
-	}
+    return snippets.length > 0 ? snippets : null;   
+  }
 
 
 });
