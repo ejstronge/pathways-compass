@@ -57,7 +57,7 @@ var mapPrefix = '__prefix__';
 
 var results;
 var cachedResultsByTopic = {};
-var topicPreferences = {};
+var topicPreferences = {};  // Use helper function `_getTopicPreferenceMapKey` to generate keys
 var lastClick = new Date();
 var timeout;
 
@@ -68,13 +68,15 @@ $(document).ready(function() {
 	inputChange();
 
   function toggleTopicButtion(e) {
-    console.log(e.target.name);
-    topicPreferences[e.target.name] = e.target.checked;
+    topicPreferences[_getTopicPreferenceMapKey(e.target.name)] = e.target.checked;
     refilterSearchResults();
   }
 
   function refilterSearchResults() {
-    console.log('start refiltering here');
+    var newElements = getResultHTMLElements(
+      _.sortBy(_extractLocalProperties(mapPrefix, cachedResultsByTopic)));
+    $('#results').empty();
+    $('#results').append(newElements);
   }
   
 	function inputChange() {
@@ -86,18 +88,21 @@ $(document).ready(function() {
 		lastClick = new Date();
 		clearTimeout(timeout);
 		timeout = setTimeout(function() {
-			$('#results').empty();
 			
 			results = getSearchResults(query);
+      refreshResultsCache(results);
 			console.log('Search Results for', query, results, results.length);
-      var resultElements = makeResultHTMLElements(results);
+
+      // Use lodash to ensure stable sorting. Both inner arguments are globals
+      var topicArray = _.sortBy(_extractLocalProperties(mapPrefix, cachedResultsByTopic));
 
       $('#filter-holder').empty();  // TODO save users preferences re: toggle state before emptying
       $('#filter-holder').off('change');
       // TODO FIXME Boxes shouldn't be visible initially
-      makeTopicCheckboxHTMLElements();
+      makeTopicCheckboxHTMLElements(topicArray);
 
-      $('#results').append(resultElements);
+			$('#results').empty();
+      $('#results').append(getResultHTMLElements(topicArray));
 
 			if (results.length == 0 && query.length != 0) {
 				$('#results').append($(
@@ -110,77 +115,113 @@ $(document).ready(function() {
 		}, delay);
 	};
 
-  function makeTopicCheckboxHTMLElements() {
-
-    // Use lodash to ensure stable sorting. Both inner arguments are globals
-    var topicArray = _.sortBy(_extractLocalProperties(mapPrefix, cachedResultsByTopic));
+  function makeTopicCheckboxHTMLElements(topicArray) {
 
     var checkboxHTMLElements = [];
-    for (var i = 0; i < topicArray.length; i += 4) { // Only display four items per line
+    for (var i = 0; i < topicArray.length; i += 4) {  // Only display four items per line
       var newButtons = '<div class="row filter-button-array">' +
         '<div class="btn-group btn-group btn-group-justified" data-toggle="buttons">';
 
       var arrayLimit = Math.min(i + 4, topicArray.length);
       for (var j = i; j < arrayLimit; j++) {
-        var collapsedTopic = topicArray[j].split(/\s+/).join('');
+        var currTopic = topicArray[j];
+        var collapsedTopic = currTopic.split(/\s+/).join('');
 
         newButtons += '' +
             '<label class="btn active" id="' + collapsedTopic +'">' +
               '<input type="checkbox" name="' + collapsedTopic + '" checked>' +
                 '<i class="fa fa-square-o fa-2x"></i><i class="fa fa-check-square-o fa-2x"></i>' + 
-                '<span class="topic-text">  ' + topicArray[j] + '</span>' +
+                '<span class="topic-text">  ' + currTopic + '[' + 
+                   cachedResultsByTopic[mapPrefix + currTopic].length +
+                   ']'+ '</span>' +
             '</label>';
-        // Binding click events to #filter-holder, which currently exists. The 
-        // buttons have not been added to the DOM
+        // Binding click events to #filter-holder, which currently exists. Note the 
+        // buttons, however, have not yet been added to the DOM
         $('#filter-holder').on('change', '#' + collapsedTopic, toggleTopicButtion);
       }
       newButtons += '</div></div>';
+      $('#filter-holder').append($(newButtons));
     }
-    $('#filter-holder').append($(newButtons));
   }
 
-  function makeResultHTMLElements(resultsData) {
-    /*
-     * Given a result object, return a jQuery element of the
-     * appropriate `div`. Also, populate `cachedResultsByTopic`, a map of 
-     * topic - array of related results
+  function _getTopicPreferenceMapKey(t) {
+    /* Remove whitespace and add map prefix for topic names
      */
-    var resultElements = [];
-    resultsData.slice(0, maxResults).forEach(function(r) {
+    return mapPrefix + t.split(/\s+/).join('');
+  }
 
-      if (!(r.topic in cachedResultsByTopic)) {
+  function refreshResultsCache(resultsData) {
+    /*
+     * Given new results data, populate `cachedResultsByTopic`, a map of 
+     * topics to arrays of related results
+     */
+    cachedResultsByTopic = {};  // Clear old data
+    resultsData.forEach(function(r) {
+
+      if (!((mapPrefix + r.topic) in cachedResultsByTopic)) {
         cachedResultsByTopic[mapPrefix + r.topic] = [];
       }
-      // FIXME need to think about when to remove the old data
       cachedResultsByTopic[mapPrefix + r.topic].push(r);
+    });
+  };
+
+  function getResultHTMLElements(topicArray) {
+    // Sort, then return HTML elements using the data cache in 
+    // `cachedResultsByTopic`
+
+    // TODO - should show the checkbox bar by default when a checkbox has been
+    // deselected, but hide in other cases
+
+    // Get preferences and set defaults as needed. Respect existing preferences
+    // TODO persist user preferences beyond the session
+    var filteredResults = [];
+    for (var i = 0; i < topicArray.length; i++) {
+
+      var currTopic = topicArray[i];
+      if (!((_getTopicPreferenceMapKey(currTopic)) in topicPreferences)) {
+        topicPreferences[_getTopicPreferenceMapKey(currTopic)] = true;
+      }
+
+      if (topicPreferences[_getTopicPreferenceMapKey(currTopic)]) {
+        Array.prototype.push.apply(
+          filteredResults, cachedResultsByTopic[mapPrefix + currTopic]);
+      }
+    }
+    console.log('len filter ' + filteredResults.length);
+
+    var resultElements = [];
+    _.sortBy(filteredResults, 'score').slice(0, maxResults).forEach(function(r) {
 
       var newResult = '<div class="panel panel-default">' + '	<div class="panel-body">'
-      if (r.local) {
 
+      if (r.local) {
         var pdfFileLink = './content/' + r.link;
-        newResult += '    <h5><a href="' + pdfFileLink + '" target="_blank">'+r.link+'</a></h5>' +
-          '<p>		Snippets (click a snippet to access document):<p><ul>';
+
+        newResult += '    <h5><a href="' + pdfFileLink + '" target="_blank">'+r.link+'</a></h5>';
 
         if (r.snippets) {
+          newResult += '<p>		Snippets (click a snippet to access document):<p><ul>';
           for (var i = 0; i < r.snippets.length; i++) {
-            // Example `n`: {text: 'Here is a query with context.', pageNo: 5}
+            // Example: {text: 'Here is a query with context.', pageNo: 5}
             newResult += (
             '<li> <a class="snippet" href="' + pdfFileLink + '#page=' + r.snippets[i].pageNo + '" target="_blank">' +
               r.snippets[i].text +
             '</a></li><br>' // should eventually style this and add padding-bottom
             );
           }
+        } else if (!r.snippets) {
+          newResult += '<p>		<i>No matches found in the body of this document</i><p>';
         }
         newResult +=  '</ul>	</div></div>';
 
-      } else {
+      } else if (!r.local) {
         newResult += '		<h5>' + '<a href="'+r.link+'" target="_blank">'+r.title+'</a>' +'</h5>' +
           '		Link to '+r.link+'<br>';
       }
       resultElements.push($(newResult));
     });
-    return resultElements;
-  }
+    return resultElements.slice(0, maxResults);
+  };
 
   function invIndexSearch(directory, queryArray) {
 
@@ -247,7 +288,7 @@ $(document).ready(function() {
 			}
 		});
     return results;
-  }
+  };
 
   function getTitleMatch(directory, queryArray) {
     // queries - array of comma-delimited queries
@@ -266,7 +307,7 @@ $(document).ready(function() {
       }
     }
     return matchingDocuments;
-  }
+  };
 
   function getBodyMatch(invertedIndex, queryArray) {
     // Return names of documents containing any whole string found
@@ -284,7 +325,7 @@ $(document).ready(function() {
       }
     }
     return _extractLocalProperties(mapPrefix, tempMatchedDocuments);
-  }
+  };
 
   function getHitsPerFile(queryArray, invertedIndex, matchedDocuments) {
     // Return a map of filename to {query: queryFrequency} objects
@@ -309,7 +350,7 @@ $(document).ready(function() {
       }
     }
     return resultsMap;
-  }
+  };
 
   function _extractLocalProperties(prefix, o) {
     // Return an array of properties in `o` that
@@ -321,7 +362,7 @@ $(document).ready(function() {
       }
     }
     return properties
-  }
+  };
 
 	function getSearchResults(query) {
 		// Split up query by commas
