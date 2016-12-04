@@ -150,7 +150,6 @@ compass = (function() {
           filteredResults, cachedResultsByTopic[mapPrefix + currTopic]);
       }
     }
-    console.log('len filter ' + filteredResults.length);
 
     var resultElements = [];
     _.sortBy(filteredResults, 'score').slice(0, maxResults).forEach(function(r) {
@@ -188,7 +187,7 @@ compass = (function() {
 
   function invIndexSearch(directory, queryArray) {
 
-    var titleWeight = 1000;  // Value title matches 1000x body matches
+    var titleWeight = 10;  // Value title matches 1000x body matches
 
     // Currently, the inverse index isn't set up to handle
     // bigrams. Will have a second query array as a workaround
@@ -198,7 +197,11 @@ compass = (function() {
       Array.prototype.push.apply(queryUnigrams, queryArray[i].split(/\s+/));
     }
 
-    var titleMatches = getTitleMatch(directory, queryUnigrams);
+    // Should not use the unigrams when searching for title matches -
+    // otherwise, the query 'renal cell cancer' might yield
+    // "Ovarian Cancer" as a top hit, solely due to the word `cancer`,
+    // despite the two being very distinct topics
+    var titleMatches = getTitleMatch(directory, queryArray);
     var bodyMatches = getBodyMatch(invertedIndex, queryUnigrams);
 
     var tempMatchedDocumentArray = titleMatches.concat(bodyMatches);
@@ -229,7 +232,7 @@ compass = (function() {
       for (var i = 0; i < queryUnigrams.length; i++) {
         // This introduces something of a bug - we double count `renal` and `cell`
         // if a user enters "renal cell"
-        bodyMatchNum += hitsPerFile[title][queryArray[i]];
+        bodyMatchNum += parseInt(hitsPerFile[title][queryArray[i]]);
       }
 
 			if (bodySnippets != null || (titleMatches.length > 0 && content.text == '')) {
@@ -273,21 +276,24 @@ compass = (function() {
   };
 
   function getBodyMatch(invertedIndex, queryArray) {
-    // Return names of documents containing any whole string found
+    // Return the set of documents containing each term
     // in queryArray
 
-    var tempMatchedDocuments = {}; // 'set' of matched documents
-    for (var i = 0; i < queryArray.length; i++) {
+    var outputArray = null;
 
+    for (var i = 0; i < queryArray.length; i++) {
       var docList = invertedIndex[queryArray[i]];
-      if (typeof docList === 'undefined') {
-        continue;
+      if (docList === undefined) {
+        return [];  // All query terms must be present
       }
-      for (var j = 0; j < docList.length; j++) {
-        tempMatchedDocuments[mapPrefix + docList[j].file] = 1;
+      docList = _.pluck(docList, 'file');
+
+      if (outputArray === null) {
+        outputArray = docList;
       }
+      outputArray = _.intersection(outputArray, docList);
     }
-    return _extractLocalProperties(mapPrefix, tempMatchedDocuments);
+    return outputArray === null ? [] : outputArray;
   };
 
   function getHitsPerFile(queryArray, invertedIndex, matchedDocuments) {
@@ -308,7 +314,7 @@ compass = (function() {
       for (var j = 0; j < allQueryContainingDocs.length; j++) {
         var f = allQueryContainingDocs[j].file;
         if (f in resultsMap) {
-          resultsMap[f][q] = allQueryContainingDocs[j].freq;
+          resultsMap[f][q] = parseInt(allQueryContainingDocs[j].freq);
         }
       }
     }
@@ -329,13 +335,15 @@ compass = (function() {
 
   function getSearchResults(query) {
     // Split up query by commas
-    var splitQuery = query.toLowerCase().split(',');
-    splitQuery = _.filter(splitQuery, function(n) {
-      return n.split(' ').join('').length > 1;
-    });
-
-    // `directory` obtained from global scope
-    return invIndexSearch(directory, splitQuery);
+    var queryTerm = query.toLowerCase().split(',');
+    var splitQuery = [];
+    for (var i = 0; i < queryTerm.length; i++) {
+      var trimmedTerm = $.trim(queryTerm[i]);
+      if (trimmedTerm.length > 2) {
+        splitQuery.push(trimmedTerm);
+      }
+    }
+    return invIndexSearch(directory, splitQuery);  // `directory` is global
   };
 
   // Gets a list of text matches for a given document. Only
@@ -370,16 +378,12 @@ compass = (function() {
     // text - content from a PDF
     // queries - list of queries inserted into search box
 
-    var containsAllParts = true;
     queries.forEach(function(n) {
       if (text.toLowerCase().indexOf(n) == -1) {
-        containsAllParts = false;
+        // not all query parts match in the text.
+        return null;
       }
     });
-
-    if (!containsAllParts) {
-      return;  // not all query parts match in the text.
-    }   
 
     var nextIndexes = {};
     var snippetTextArray = [];
@@ -429,6 +433,12 @@ compass = (function() {
         var after = text.substring(closest[1].index + closest[1].query.length, afterIndex).match(/.[^\.\-\–\?]+/)[0];
 
         var newSnippet = before + '<b>' + closest[1].query + '</b>' + after + '. <i>(Page ' + snippetPage + ')</i>';
+
+        // TODO with the current two-step search system (first step based on keywords,
+        // second step based on a full-text search using this function), we sometimes flag
+        // parts of words as beting matches to our queries (e.g., query = 'fgf' should not return snippets 
+        // containing 'bfgf', but this currently happens).
+        
         // NOTE Only showing one result per page (if a user is interested, s/he will likely
         // already know from the first snippet shown.
         if (snippetTextArray.indexOf('Page ' + snippetPage) == -1) {
