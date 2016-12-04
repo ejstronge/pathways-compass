@@ -104,13 +104,13 @@ var exploreDir = function(dir) {
     } else {
       // Example match: 
       // > matchObject
-      // [ 'Neuroanatomy Final Review!.txt.tokens',
-      //   'Neuroanatomy Final Review!',
+      // [ '05.25.16 Neuroanatomy Final Review!.txt.tokens',
+      //   '05.25.16 Neuroanatomy Final Review!',
       //   '.txt.tokens',
       //   index: 0,
       //   input: 'Neuroanatomy Final Review!.txt.tokens' 
       //   ]
-      var splitFile = file.match(/^([^.]+)(.*)$/);
+      var splitFile = file.match(/^(.*?)((?:\.[A-Za-z0-9]{3,6}){1,2})$/);
       if (splitFile != null) {
         var minusExtension = splitFile[1];
         var extension = splitFile[2];
