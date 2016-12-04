@@ -10,7 +10,6 @@ compass = (function() {
 
   var results;
   var cachedResultsByTopic = {};
-  // Use helper function `_getTopicPreferenceMapKey` to generate keys for `topicPreferences`
   var topicPreferences = localStorage.getItem('prefs') ? JSON.parse(localStorage.getItem('prefs')) : {};
   var lastClick = new Date();
   var timeout;
@@ -29,7 +28,7 @@ compass = (function() {
   inputChange();
 
   function toggleTopicButtion(e) {
-    topicPreferences[_getTopicPreferenceMapKey(e.target.name)] = e.target.checked;
+    topicPreferences[e.target.name] = e.target.checked;
     refilterSearchResults();
     localStorage.setItem('prefs', JSON.stringify(topicPreferences));
   }
@@ -82,10 +81,10 @@ compass = (function() {
     for (var i = 0; i < topicArray.length; i ++) {
 
       var currTopic = topicArray[i];
-      var collapsedTopic = currTopic.split(/\s+/).join('');
+      var collapsedTopic = _makeTopicPreferenceMapKey(currTopic);
 
-      if (topicPreferences[_getTopicPreferenceMapKey(collapsedTopic)] != null) {
-        checked = topicPreferences[_getTopicPreferenceMapKey(collapsedTopic)];
+      if (topicPreferences[collapsedTopic] != null) {
+        checked = topicPreferences[collapsedTopic];
       } else {
         checked = true;
       }
@@ -107,10 +106,11 @@ compass = (function() {
     $('#filter-holder').append($(newButtons));
   }
 
-  function _getTopicPreferenceMapKey(t) {
-    /* Remove whitespace and add map prefix for topic names
+  function _makeTopicPreferenceMapKey(t) {
+    /* Remove whitespace for topic names as these otherwise
+     * could not be used as HTML name attributes
      */
-    return mapPrefix + t.split(/\s+/).join('');
+    return t.split(/\s+/).join('');
   }
 
   function refreshResultsCache(resultsData) {
@@ -142,11 +142,11 @@ compass = (function() {
     for (var i = 0; i < topicArray.length; i++) {
 
       var currTopic = topicArray[i];
-      if (!((_getTopicPreferenceMapKey(currTopic)) in topicPreferences)) {
-        topicPreferences[_getTopicPreferenceMapKey(currTopic)] = true;
+      if (!(_makeTopicPreferenceMapKey(currTopic) in topicPreferences)) {
+        topicPreferences[currTopic] = true;
       }
 
-      if (topicPreferences[_getTopicPreferenceMapKey(currTopic)]) {
+      if (topicPreferences[currTopic]) {
         Array.prototype.push.apply(
           filteredResults, cachedResultsByTopic[mapPrefix + currTopic]);
       }
