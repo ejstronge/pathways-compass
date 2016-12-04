@@ -144,12 +144,12 @@ var exploreDir = function(dir) {
               var frequency = tokenInfo[1];
               // Token exclusion criteria:
               // - Empty string
-              // - Very long string (things bigger than dysdiachokinesis unlikely to be searched for...
+              // - Very long strings
               // - Strings containing more than 4 numbers (e.g., "a1413302")
               // - Strings containing over 5 letters and then >2 digits (e.g., "abstinence109")
               // - Strings starting with a letter followed by a digit and then >1 letters (e.g., "a8vator")
               // - Strings beginning in a single character followed by only digits
-              if (token === '' || token.length >= 20 || token.match(/\d\d\d\d/) || token.match(/[a-z]{5}\d\d+/) ||
+              if (token === '' || token.length >= 40 || token.match(/\d\d\d\d/) || token.match(/[a-z]{5}\d\d+/) ||
                   token.match(/[a-z]{1,2}\d+[a-z]+/) || token.match(/^[a-z]\d+$/)) {
                 continue
               } else if (token in invertedIndex) {
