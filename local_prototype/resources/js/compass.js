@@ -90,8 +90,9 @@ compass = (function() {
         checked = true;
       }
 
+      var showLabel = checked ? ' active' : '';
       newButtons += '' +
-          '<label class="btn active" id="' + collapsedTopic +'" style="display: inline-table;">' +
+          '<label class="btn'+ showLabel + '" id="' + collapsedTopic +'" style="display: inline-table;">' +
             '<input type="checkbox" name="' + collapsedTopic + '" ' + (checked ? 'checked' : '') +'>' +
               '<i class="fa fa-square-o fa-2x"></i><i class="fa fa-check-square-o fa-2x"></i>' + 
                 '<span class="topic-text">  ' + currTopic + ' [' + 
