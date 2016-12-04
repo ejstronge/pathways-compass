@@ -187,7 +187,7 @@ compass = (function() {
 
   function invIndexSearch(directory, queryArray) {
 
-    var titleWeight = 1000;  // Value title matches 1000x body matches
+    var titleWeight = 10;  // Value title matches 1000x body matches
 
     // Currently, the inverse index isn't set up to handle
     // bigrams. Will have a second query array as a workaround
@@ -232,7 +232,7 @@ compass = (function() {
       for (var i = 0; i < queryUnigrams.length; i++) {
         // This introduces something of a bug - we double count `renal` and `cell`
         // if a user enters "renal cell"
-        bodyMatchNum += hitsPerFile[title][queryArray[i]];
+        bodyMatchNum += parseInt(hitsPerFile[title][queryArray[i]]);
       }
 
 			if (bodySnippets != null || (titleMatches.length > 0 && content.text == '')) {
@@ -314,7 +314,7 @@ compass = (function() {
       for (var j = 0; j < allQueryContainingDocs.length; j++) {
         var f = allQueryContainingDocs[j].file;
         if (f in resultsMap) {
-          resultsMap[f][q] = allQueryContainingDocs[j].freq;
+          resultsMap[f][q] = parseInt(allQueryContainingDocs[j].freq);
         }
       }
     }
