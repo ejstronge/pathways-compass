@@ -194,8 +194,13 @@ compass = (function() {
     // bigrams. Will have a second query array as a workaround
     var queryUnigrams = [];
     for (var i = 0; i < queryArray.length; i++) {
+      // In token processing, converted punctuation to spaces. Though
+      // we won't transform all punctuation, dashes may appear in
+      // queries such as 'beta-blocker' and should be converted here,
+      // as well
+      var q = queryArray[i].replace('-', ' ');
       // Need Array.push to update queryUnigrams in place
-      Array.prototype.push.apply(queryUnigrams, queryArray[i].split(/\s+/));
+      Array.prototype.push.apply(queryUnigrams, q.split(/\s+/));
     }
 
     // Should not use the unigrams when searching for title matches -
