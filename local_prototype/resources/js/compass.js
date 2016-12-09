@@ -146,7 +146,7 @@ compass = (function() {
         topicPreferences[currTopic] = true;
       }
 
-      if (topicPreferences[currTopic]) {
+      if (topicPreferences[_makeTopicPreferenceMapKey(currTopic)]) {
         Array.prototype.push.apply(
           filteredResults, cachedResultsByTopic[mapPrefix + currTopic]);
       }
